@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import asyncio
+import os
+from datetime import datetime
 
-# Import routers
+# Routers
 from routers.auth import router as auth_router
 from routers.jira import router as jira_router
 from routers.dashboard import router as dashboard_router
@@ -13,70 +15,83 @@ from routers.users import router as users_router
 from routers.files import router as files_router
 from routers.projects import router as projects_router
 from routers.reports import router as reports_router
+from routers import risks
 
-# Import database connection
+# Database
 from db import connect_to_mongo, close_mongo_connection
 from db.init_db import init_database
 from db.mongodb import get_database
-from services.jira_service import jira_service, JiraTask
-from datetime import datetime
 
-# Import services
+# Services
+from services.jira_service import jira_service, JiraTask
 from services import scheduler_service
 
-# Configure logging
+# Logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("multi-desk")
 
+# =========================
+# Lifespan (Startup / Shutdown)
+# =========================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events"""
-    # Startup
     logger.info("Starting Multi Desk Backend...")
-    await connect_to_mongo()
-    await init_database()
-    logger.info("Multi Desk Backend started successfully")
-    
-    # Start scheduler in background
-    scheduler_task = asyncio.create_task(scheduler_service.start_scheduler())
-    
+
+    # Mongo should not block health checks
+    try:
+        await connect_to_mongo()
+        await init_database()
+        logger.info("MongoDB connected")
+    except Exception as e:
+        logger.error(f"Mongo startup error: {e}")
+
+    # Start scheduler in background (non-blocking)
+    scheduler_task = asyncio.create_task(
+        scheduler_service.start_scheduler()
+    )
+
     yield
-    
-    # Shutdown
+
     logger.info("Shutting down Multi Desk Backend...")
     scheduler_service.stop_scheduler()
     await close_mongo_connection()
-    logger.info("Multi Desk Backend shut down successfully")
+    scheduler_task.cancel()
+    logger.info("Shutdown complete")
 
-# Create FastAPI application
+# =========================
+# App Init
+# =========================
 app = FastAPI(
     title="Multi Desk API",
-    description="Backend API for Multi Desk Dashboard Tool",
     version="1.0.0",
     lifespan=lifespan
 )
 
-# Configure CORS
+# =========================
+# CORS
+# =========================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:8080",  # Alternative dev server
-        "http://localhost:3000",  # React dev server
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8080",
         "http://127.0.0.1:3000",
-        "https://multidesk-eight.vercel.app"  # Deployed frontend
+        "https://multidesk-eight.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+# =========================
+# Routers
+# =========================
 app.include_router(auth_router)
 app.include_router(jira_router)
 app.include_router(dashboard_router)
@@ -85,64 +100,56 @@ app.include_router(users_router)
 app.include_router(files_router)
 app.include_router(projects_router)
 app.include_router(reports_router)
+app.include_router(risks.router)
 
-# Root endpoint
+# =========================
+# Root
+# =========================
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "message": "Multi Desk API",
         "version": "1.0.0",
-        "status": "healthy"
+        "status": "running"
     }
 
-# Health check endpoint
-@app.get("/health")
+# =========================
+# HEALTH CHECK (GET + HEAD)
+# =========================
+@app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "multi-desk-backend"
-    }
-
-@app.head("/health", include_in_schema=False)
-async def health_head():
     return Response(status_code=200)
 
-
-
+# =========================
+# Mongo Test
+# =========================
 @app.get("/api/mongo/connection-test")
 async def test_mongo_connection():
-    """Test MongoDB connection endpoint"""
     try:
         db = get_database()
-        # Try to access a collection to verify connection
         collections = await db.list_collection_names()
         return {
             "status": "connected",
             "collections_count": len(collections),
-            "collections": collections,
-            "message": "MongoDB connection successful"
         }
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
-            "message": "Failed to connect to MongoDB"
         }
 
-
+# =========================
+# Jira Storage Test
+# =========================
 @app.get("/api/mongo/test-task-storage")
 async def test_task_storage():
-    """Test endpoint to verify JIRA task storage functionality"""
     try:
-        # Create a test task
         test_task = JiraTask(
             id="",
             user_id="test_user_123",
             jira_id="test_1001",
             key="TEST-1",
-            summary="Test task for verification",
+            summary="Test task",
             status="To Do",
             priority="High",
             assignee="Test User",
@@ -154,88 +161,50 @@ async def test_task_storage():
             project_name="Test Project",
             issue_type="Task"
         )
-        
-        # Store the task using the service method
-        result = await jira_service.store_jira_tasks("test_user_123", [test_task])
-        
-        # Verify the task was stored by counting
+
+        await jira_service.store_jira_tasks("test_user_123", [test_task])
+
         db = get_database()
-        tasks_collection = db.jira_tasks
-        task_count = await tasks_collection.count_documents({"user_id": "test_user_123"})
-        
-        # Clean up test data
-        await tasks_collection.delete_many({"user_id": "test_user_123"})
-        
-        return {
-            "status": "success",
-            "storage_result": result,
-            "tasks_stored": task_count,
-            "message": f"Task storage test completed. {task_count} tasks were stored and cleaned up."
-        }
+        count = await db.jira_tasks.count_documents({"user_id": "test_user_123"})
+        await db.jira_tasks.delete_many({"user_id": "test_user_123"})
+
+        return {"status": "success", "tasks_stored": count}
+
     except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Failed to test task storage"
-        }
+        return {"status": "error", "error": str(e)}
 
-
+# =========================
+# Jira Fetch Test
+# =========================
 @app.get("/api/mongo/test-jira-fetch")
 async def test_jira_fetch():
-    """Test endpoint to verify JIRA fetch and storage functionality"""
-    from services.jira_service import jira_service
     try:
-        # Get JIRA credentials for the current user
-        # For this test, we'll use a sample user ID that should have credentials
-        user_id = "693e942a4a63b57055d9a211"  # From the logs
-        
-        # Get credentials
+        user_id = "693e942a4a63b57055d9a211"
         credentials = await jira_service.get_jira_credentials(user_id)
+
         if not credentials:
-            return {
-                "status": "error",
-                "message": f"No JIRA credentials found for user {user_id}. Please connect JIRA first."
-            }
-        
-        # Validate connection
-        is_valid = await jira_service.validate_jira_connection(credentials)
-        if not is_valid:
-            return {
-                "status": "error",
-                "message": f"Invalid JIRA connection for user {user_id}. Please check credentials."
-            }
-        
-        # Fetch tasks using the same method as sync
+            return {"status": "error", "message": "No credentials"}
+
+        valid = await jira_service.validate_jira_connection(credentials)
+        if not valid:
+            return {"status": "error", "message": "Invalid JIRA connection"}
+
         tasks = await jira_service.fetch_jira_tasks(credentials, user_id)
-        
-        # Store tasks if any found
-        storage_result = True
         if tasks:
-            storage_result = await jira_service.store_jira_tasks(user_id, tasks)
-        
+            await jira_service.store_jira_tasks(user_id, tasks)
+
         return {
             "status": "success",
-            "credentials_found": credentials is not None,
-            "connection_valid": is_valid,
-            "tasks_fetched": len(tasks),
-            "storage_result": storage_result,
-            "message": f"JIRA fetch test completed. Fetched {len(tasks)} tasks."
-        }
-    
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": "Failed to test JIRA fetch"
+            "tasks_fetched": len(tasks)
         }
 
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+# =========================
+# Local Run (Render ignores this)
+# =========================
 if __name__ == "__main__":
     import uvicorn
-    import os
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
-
-
-from routers import risks
-
-app.include_router(risks.router)
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
