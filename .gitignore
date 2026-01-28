@@ -1,0 +1,38 @@
+# Root level .gitignore for Multi Desk Jira Dashboard
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment files (root level)
+.env
+.env.local
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*~
+.*~
+
+# Build artifacts (if any at root level)
+dist/
+build/
+
+# Dependency directories (if accidentally created at root)
+node_modules/
+__pycache__/
+
+# Upload directory (contains user data)
+uploads/
