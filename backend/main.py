@@ -68,7 +68,8 @@ app.add_middleware(
         "http://localhost:3000",  # React dev server
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8080",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "multidesk-eight.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
