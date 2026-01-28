@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -69,7 +69,7 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8080",
         "http://127.0.0.1:3000",
-        "multidesk-eight.vercel.app"
+        "https://multidesk-eight.vercel.app"  # Deployed frontend
     ],
     allow_credentials=True,
     allow_methods=["*"],
