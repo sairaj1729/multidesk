@@ -105,6 +105,11 @@ async def health_check():
         "service": "multi-desk-backend"
     }
 
+@app.head("/health", include_in_schema=False)
+async def health_head():
+    return Response(status_code=200)
+
+
 
 @app.get("/api/mongo/connection-test")
 async def test_mongo_connection():
