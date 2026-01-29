@@ -61,10 +61,26 @@ export default function Register() {
     }
 
     setIsLoading(true);
+    let timeoutId;
 
     try {
+      // Set a timeout to prevent indefinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Request timeout - please check your connection'));
+        }, 30000); // 30 second timeout
+      });
+
       const { confirmPassword, ...registerData } = formData;
-      const result = await authService.register(registerData);
+      
+      // Race between the actual request and timeout
+      const result = await Promise.race([
+        authService.register(registerData),
+        timeoutPromise
+      ]);
+      
+      // Clear timeout if request completes successfully
+      clearTimeout(timeoutId);
       
       if (result.success) {
         toast({
@@ -80,13 +96,15 @@ export default function Register() {
         });
       }
     } catch (error) {
+      console.error('Registration error caught:', error);
       toast({
         title: "Registration Failed",
-        description: "An unexpected error occurred. Please try again.",
+        description: error.message || "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
+      if (timeoutId) clearTimeout(timeoutId);
     }
   };
 

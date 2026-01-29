@@ -24,8 +24,10 @@ class EmailService:
         return ''.join(random.choices(string.digits, k=length))
 
     async def send_email(self, to_email: str, subject: str, body: str) -> bool:
-        """Send email using SMTP"""
+        """Send email using SMTP with timeout"""
         try:
+            logger.info(f"Attempting to send email to {to_email}")
+            
             # Create message
             msg = MIMEMultipart()
             msg['From'] = self.mail_from
@@ -35,8 +37,9 @@ class EmailService:
             # Add body to email
             msg.attach(MIMEText(body, 'html'))
             
-            # Create SMTP session
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+            # Create SMTP session with timeout
+            import socket
+            server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10)
             server.starttls()  # Enable security
             server.login(self.smtp_user, self.smtp_pass)
             
@@ -48,6 +51,9 @@ class EmailService:
             logger.info(f"Email sent successfully to {to_email}")
             return True
             
+        except socket.timeout:
+            logger.error(f"SMTP timeout when sending email to {to_email}")
+            return False
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
             return False

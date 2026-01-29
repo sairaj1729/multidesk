@@ -9,9 +9,12 @@ class AuthService {
   // Register new user
   async register(userData) {
     try {
+      console.log('Attempting to register user:', userData);
       const response = await apiService.post('/api/auth/register', userData);
+      console.log('Registration response:', response);
       return { success: true, data: response };
     } catch (error) {
+      console.error('Registration error:', error);
       return { success: false, error: error.message };
     }
   }

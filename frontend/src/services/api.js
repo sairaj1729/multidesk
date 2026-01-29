@@ -30,14 +30,38 @@ class ApiService {
     }
 
     try {
+      console.log('Making API request to:', url);
+      console.log('Request config:', config);
+      
       const response = await fetch(url, config);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', [...response.headers.entries()]);
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorText = await response.text();
+        console.error('Error response text:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { detail: errorText || `HTTP error! status: ${response.status}` };
+        }
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
+      
+      if (!responseText) {
+        return {};
+      }
+      
+      try {
+        return JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse JSON response:', e);
+        return { message: responseText };
+      }
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
