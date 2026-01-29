@@ -1,8 +1,6 @@
-import smtplib
+import resend
 import random
 import string
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from typing import Optional
 from config import settings
@@ -13,49 +11,37 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     def __init__(self):
-        self.smtp_host = settings.MAIL_HOST
-        self.smtp_port = settings.MAIL_PORT
-        self.smtp_user = settings.MAIL_USER
-        self.smtp_pass = settings.MAIL_PASS
-        self.mail_from = settings.MAIL_FROM
+        # Initialize Resend with API key
+        resend.api_key = settings.RESEND_API_KEY
+        
+        # Use the configured Resend sender email from environment variables
+        # Based on the Resend account configuration, it appears to be restricted to abcx25398@gmail.com
+        # So we'll use that as the sender to comply with account restrictions
+        self.mail_from = settings.RESEND_SENDER_EMAIL
 
     def generate_otp(self, length: int = 6) -> str:
         """Generate a random OTP"""
         return ''.join(random.choices(string.digits, k=length))
 
     async def send_email(self, to_email: str, subject: str, body: str) -> bool:
-        """Send email using SMTP with timeout"""
+        """Send email using Resend"""
         try:
-            logger.info(f"Attempting to send email to {to_email}")
+            logger.info(f"Attempting to send email to {to_email} using Resend")
             
-            # Create message
-            msg = MIMEMultipart()
-            msg['From'] = self.mail_from
-            msg['To'] = to_email
-            msg['Subject'] = subject
+            params = {
+                "from": f"Multi Desk <{self.mail_from}>",
+                "to": [to_email],  # Resend expects a list of recipients
+                "subject": subject,
+                "html": body
+            }
             
-            # Add body to email
-            msg.attach(MIMEText(body, 'html'))
+            email = resend.Emails.send(params)
             
-            # Create SMTP session with timeout
-            import socket
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10)
-            server.starttls()  # Enable security
-            server.login(self.smtp_user, self.smtp_pass)
-            
-            # Send email
-            text = msg.as_string()
-            server.sendmail(self.mail_from, to_email, text)
-            server.quit()
-            
-            logger.info(f"Email sent successfully to {to_email}")
+            logger.info(f"Email sent successfully to {to_email} with ID: {email['id']}")
             return True
             
-        except socket.timeout:
-            logger.error(f"SMTP timeout when sending email to {to_email}")
-            return False
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {e}")
+            logger.error(f"Failed to send email to {to_email} via Resend: {e}")
             return False
 
     async def send_otp_email(self, email: str, otp: str, purpose: str = "verification") -> bool:

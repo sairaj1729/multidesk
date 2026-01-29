@@ -9,6 +9,7 @@ COPY requirements.txt .
 
 # Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir resend && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code

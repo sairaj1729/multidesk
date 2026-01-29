@@ -20,8 +20,15 @@ class Settings:
     MAIL_PASS: str = os.getenv("MAIL_PASS", "")
     MAIL_FROM: str = os.getenv("MAIL_FROM", "")
     
+    # Resend Configuration
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    RESEND_SENDER_EMAIL: str = os.getenv("RESEND_SENDER_EMAIL", "onboarding@resend.dev")
+    
     # OTP Configuration
     OTP_EXPIRE_MINUTES: int = int(os.getenv("OTP_EXPIRE_MINUTES", "10"))
+    
+    # OTP Bypass Configuration
+    BYPASS_OTP_VERIFICATION: bool = os.getenv("BYPASS_OTP_VERIFICATION", "false").lower() == "true"
     
     # Jira Configuration
     JIRA_DOMAIN: str = os.getenv("JIRA_DOMAIN", "")

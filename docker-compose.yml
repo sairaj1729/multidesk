@@ -10,12 +10,15 @@ services:
       - DATABASE_NAME=multidesk
       - SECRET_KEY=your-super-secret-key-change-in-production
       - FERNET_KEY=sp-gxtj4HsG20kbUCh9pGATYTZrJViUjtXgZC9cKyN0=
+      - RESEND_API_KEY=re_4kFKzpxP_HKjtPkVaKKf5Q6a77q5nZAJA
+      - RESEND_SENDER_EMAIL=onboarding@resend.dev
       - MAIL_HOST=smtp.gmail.com
       - MAIL_PORT=587
       - MAIL_USER=${MAIL_USER}
       - MAIL_PASS=${MAIL_PASS}
-      - MAIL_FROM=${MAIL_FROM}
+      - MAIL_FROM=onboarding@resend.dev
       - OTP_EXPIRE_MINUTES=10
+      - BYPASS_OTP_VERIFICATION=true
     depends_on:
       - mongo
     volumes:

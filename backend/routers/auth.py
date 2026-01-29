@@ -12,6 +12,7 @@ from models.auth import (
 from services.auth_service import auth_service
 from services.email_service import email_service
 from utils.dependencies import get_current_user
+from config import settings
 from datetime import timedelta
 import logging
 
@@ -30,7 +31,26 @@ async def register_user(user_create: UserCreate):
                 detail="Failed to create user"
             )
         
-        # Send verification OTP
+        # Check if OTP verification should be bypassed
+        if settings.BYPASS_OTP_VERIFICATION:
+            # Skip OTP and directly verify the user
+            success = await auth_service.verify_user_email(user.email)
+            if success:
+                return {
+                    "message": "User registered and verified successfully (OTP bypassed).",
+                    "email_sent": False,
+                    "verified": True
+                }
+            else:
+                logger.error(f"Failed to verify user {user.email} during OTP bypass")
+                # Even if auto-verification fails, still return success to allow user to proceed
+                return {
+                    "message": "User registered successfully (OTP bypassed).",
+                    "email_sent": False,
+                    "verified": True  # Mark as verified to allow login
+                }
+        
+        # Send verification OTP (normal flow)
         otp = await email_service.send_verification_otp(user.email)
         if not otp:
             # User created but email failed - still success

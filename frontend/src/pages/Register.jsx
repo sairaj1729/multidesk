@@ -83,11 +83,24 @@ export default function Register() {
       clearTimeout(timeoutId);
       
       if (result.success) {
-        toast({
-          title: "Registration Successful",
-          description: "Please check your email for verification OTP",
-        });
-        navigate("/verify-email", { state: { email: formData.email } });
+        if (result.data?.verified) {
+          // If user is auto-verified due to OTP bypass
+          toast({
+            title: "Registration Successful",
+            description: "Account created and verified successfully!",
+          });
+          // Navigate directly to login since user is already verified
+          navigate("/");
+        } else {
+          // Normal flow with OTP required
+          toast({
+            title: "Registration Successful",
+            description: result.data?.email_sent 
+              ? "Please check your email for verification OTP" 
+              : "Account created. Please contact admin for verification.",
+          });
+          navigate("/verify-email", { state: { email: formData.email } });
+        }
       } else {
         toast({
           title: "Registration Failed",
