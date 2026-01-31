@@ -55,6 +55,43 @@ class JiraService {
       return { success: false, error: error.message };
     }
   }
+
+  // User/Assignee methods
+  async getJiraUsers(projectKey = null) {
+    try {
+      const url = projectKey 
+        ? `${this.basePath}/users?project_key=${projectKey}`
+        : `${this.basePath}/users`;
+      const response = await apiService.get(url);
+      return { success: true, data: response };
+    } catch (error) {
+      console.error('Failed to fetch Jira users:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getAssignableUsers(projectKey = null) {
+    try {
+      const url = projectKey 
+        ? `${this.basePath}/users/assignable?project_key=${projectKey}`
+        : `${this.basePath}/users/assignable`;
+      const response = await apiService.get(url);
+      return { success: true, data: response };
+    } catch (error) {
+      console.error('Failed to fetch assignable users:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getUniqueAssigneesFromTasks() {
+    try {
+      const response = await apiService.get(`${this.basePath}/users/from-tasks`);
+      return { success: true, data: response };
+    } catch (error) {
+      console.error('Failed to fetch assignees from tasks:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export const jiraService = new JiraService();

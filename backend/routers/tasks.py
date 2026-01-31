@@ -58,3 +58,40 @@ async def get_task(task_id: str, current_user = Depends(get_current_user)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get task"
         )
+
+@router.get("/debug/all", response_model=dict)
+async def debug_all_tasks(current_user = Depends(get_current_user)):
+    """Debug endpoint to see all tasks and assignees"""
+    try:
+        from db import get_database
+        db = get_database()
+        tasks_collection = db.jira_tasks
+        
+        # Get all tasks for this user
+        tasks = await tasks_collection.find({"user_id": current_user.id}).to_list(length=100)
+        
+        # Extract unique assignees
+        assignees = {}
+        for task in tasks:
+            account_id = task.get("assignee_account_id")
+            if account_id:
+                if account_id not in assignees:
+                    assignees[account_id] = {
+                        "account_id": account_id,
+                        "name": task.get("assignee", "Unknown"),
+                        "email": task.get("assignee_email", "Unknown"),
+                        "task_count": 0
+                    }
+                assignees[account_id]["task_count"] += 1
+        
+        return {
+            "total_tasks": len(tasks),
+            "assignees": list(assignees.values()),
+            "sample_tasks": tasks[:5]  # First 5 tasks for inspection
+        }
+    except Exception as e:
+        logger.error(f"Debug endpoint failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Debug failed"
+        )

@@ -740,6 +740,126 @@ class JiraService:
         jql = f"project={project_key} AND issuetype=Bug"
         return await self.fetch_issues_by_jql_new_endpoint(credentials, jql)
 
+    async def fetch_jira_users(self, credentials: JiraCredentialsInDB, project_key: str = None) -> List[Dict]:
+        """Fetch all users from Jira instance or users in a specific project"""
+        try:
+            # Decrypt the API token
+            decrypted_token = self.decrypt_token(credentials.api_token)
+            
+            # Construct Jira API URL for users
+            if project_key:
+                # Fetch users in a specific project
+                jira_url = f"{self.normalize_domain(credentials.domain)}/rest/api/3/user/assignable/search?project={project_key}"
+            else:
+                # Fetch all users in the Jira instance
+                jira_url = f"{self.normalize_domain(credentials.domain)}/rest/api/3/users/search"
+            
+            # Make API call
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    jira_url,
+                    auth=(credentials.email, decrypted_token),
+                    headers={"Accept": "application/json"},
+                    timeout=30
+                )
+            
+            logger.info(f"Jira users API call to {jira_url}")
+            logger.info(f"Jira users response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                users = response.json()
+                logger.info(f"Successfully fetched {len(users)} users from Jira")
+                return users
+            elif response.status_code == 401:
+                logger.error("Jira API authentication failed - invalid credentials for users endpoint")
+                return []
+            elif response.status_code == 403:
+                logger.error("Jira API permission denied - user doesn't have permission to access users")
+                # Try alternative endpoint for assignable users
+                return await self.fetch_assignable_users(credentials, project_key)
+            else:
+                logger.error(f"Jira API call failed with status {response.status_code}: {response.text}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Failed to fetch Jira users: {e}")
+            return []
+
+    async def fetch_assignable_users(self, credentials: JiraCredentialsInDB, project_key: str = None) -> List[Dict]:
+        """Fetch users that can be assigned to issues (alternative method)"""
+        try:
+            # Decrypt the API token
+            decrypted_token = self.decrypt_token(credentials.api_token)
+            
+            # Construct Jira API URL for assignable users
+            if project_key:
+                jira_url = f"{self.normalize_domain(credentials.domain)}/rest/api/3/user/assignable/search?project={project_key}"
+            else:
+                # For all assignable users, we need to search with a query
+                jira_url = f"{self.normalize_domain(credentials.domain)}/rest/api/3/user/assignable/multiProjectSearch?query="
+            
+            # Make API call
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    jira_url,
+                    auth=(credentials.email, decrypted_token),
+                    headers={"Accept": "application/json"},
+                    timeout=30
+                )
+            
+            logger.info(f"Jira assignable users API call to {jira_url}")
+            logger.info(f"Jira assignable users response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                users = response.json()
+                logger.info(f"Successfully fetched {len(users)} assignable users from Jira")
+                return users
+            else:
+                logger.error(f"Jira API call for assignable users failed with status {response.status_code}: {response.text}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Failed to fetch assignable Jira users: {e}")
+            return []
+
+    async def get_unique_assignees_from_tasks(self, user_id: str) -> List[Dict]:
+        """Extract unique assignees from stored Jira tasks"""
+        try:
+            db = get_database()
+            tasks_collection = db.jira_tasks
+            
+            # Aggregate to get unique assignees
+            pipeline = [
+                {"$match": {"user_id": user_id}},
+                {"$group": {
+                    "_id": "$assignee_account_id",
+                    "assignee": {"$first": "$assignee"},
+                    "assignee_email": {"$first": "$assignee_email"},
+                    "count": {"$sum": 1}
+                }},
+                {"$sort": {"assignee": 1}}
+            ]
+            
+            cursor = tasks_collection.aggregate(pipeline)
+            assignees = []
+            
+            async for doc in cursor:
+                if doc["_id"]:  # Only include if account ID exists
+                    assignee = {
+                        "account_id": doc["_id"],
+                        "name": doc["assignee"],
+                        "email": doc["assignee_email"],
+                        "task_count": doc["count"]
+                    }
+                    assignees.append(assignee)
+            
+            logger.info(f"Found {len(assignees)} unique assignees from stored tasks")
+            return assignees
+            
+        except Exception as e:
+            logger.error(f"Failed to get unique assignees: {e}")
+            return []
+
 # Helper functions for date parsing
 
 def parse_jira_datetime(date_str):

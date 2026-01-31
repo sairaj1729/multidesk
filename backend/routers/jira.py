@@ -314,3 +314,79 @@ async def get_bugs(project_key: str, current_user = Depends(get_current_user)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch bugs"
         )
+
+@router.get("/users")
+async def get_jira_users(project_key: str = None, current_user = Depends(get_current_user)):
+    """Get all users from Jira instance or users in a specific project"""
+    try:
+        credentials = await jira_service.get_jira_credentials(current_user.id)
+        if not credentials or not credentials.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Jira credentials not found"
+            )
+        
+        # Validate connection before fetching users
+        is_valid = await jira_service.validate_jira_connection(credentials)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Jira connection"
+            )
+        
+        users = await jira_service.fetch_jira_users(credentials, project_key)
+        return JSONResponse(content=users)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch Jira users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch users"
+        )
+
+@router.get("/users/assignable")
+async def get_assignable_users(project_key: str = None, current_user = Depends(get_current_user)):
+    """Get users that can be assigned to issues (assignable users)"""
+    try:
+        credentials = await jira_service.get_jira_credentials(current_user.id)
+        if not credentials or not credentials.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Jira credentials not found"
+            )
+        
+        # Validate connection before fetching users
+        is_valid = await jira_service.validate_jira_connection(credentials)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Jira connection"
+            )
+        
+        users = await jira_service.fetch_assignable_users(credentials, project_key)
+        return JSONResponse(content=users)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch assignable Jira users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch assignable users"
+        )
+
+@router.get("/users/from-tasks")
+async def get_unique_assignees_from_tasks(current_user = Depends(get_current_user)):
+    """Get unique assignees from stored Jira tasks (database-based approach)"""
+    try:
+        assignees = await jira_service.get_unique_assignees_from_tasks(current_user.id)
+        return JSONResponse(content=assignees)
+        
+    except Exception as e:
+        logger.error(f"Failed to get unique assignees from tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch assignees from tasks"
+        )

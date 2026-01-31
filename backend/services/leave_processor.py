@@ -44,9 +44,9 @@ async def process_leave_file(file_id: str, file_path: str):
 
         for idx, row in df.iterrows():
             try:
-                # Parse dates and convert to Python datetime for MongoDB
-                leave_start_dt = pd.to_datetime(row["leave_start"])
-                leave_end_dt = pd.to_datetime(row["leave_end"])
+                # Parse dates with explicit format DD-MM-YYYY
+                leave_start_dt = pd.to_datetime(row["leave_start"], format='%d-%m-%Y', dayfirst=True)
+                leave_end_dt = pd.to_datetime(row["leave_end"], format='%d-%m-%Y', dayfirst=True)
                 
                 # Convert pandas Timestamp to Python datetime
                 leave_start = leave_start_dt.to_pydatetime()
@@ -61,7 +61,7 @@ async def process_leave_file(file_id: str, file_path: str):
                     "uploaded_at": datetime.utcnow()
                 }
                 records.append(record)
-                logger.debug(f"  Row {idx+1}: {employee_email} from {leave_start.date()} to {leave_end.date()}")
+                logger.debug(f"  Row {idx+1}: {row['employee_account_id'].strip()} from {leave_start.date()} to {leave_end.date()}")
             except Exception as row_error:
                 logger.warning(f"⚠️ Failed to process row {idx+1}: {row_error}")
                 continue

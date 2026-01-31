@@ -20,6 +20,8 @@ import JiraConnection from "./pages/JiraConnection";
 import Settings from "./pages/Settings";
 import Help from "./pages/Help";
 import Risks from "./pages/Risks";
+import AssigneeProfile from "./pages/AssigneeProfile";
+import AssignedTasks from "./pages/AssignedTasks";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -103,6 +105,23 @@ const App = () => (
             </ProtectedRoute>
           }>
             <Route index element={<Risks />} />
+          </Route>
+          
+          {/* Assignee Profile Routes */}
+          <Route path="/assignee/:accountId" element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<AssigneeProfile />} />
+          </Route>
+          
+          <Route path="/assignee/:accountId/tasks" element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<AssignedTasks />} />
           </Route>
           
           {/* Standalone Routes */}

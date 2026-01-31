@@ -16,21 +16,21 @@ router = APIRouter(prefix="/api/files", tags=["Files"])
 @router.post("/upload")
 async def upload_file(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Upload file - NO AUTH for testing"""
+    """Upload file"""
     content = await file.read()
     
-    # Use a default test user ID
-    test_user_id = "test_user_123"
-    test_user_email = "test@example.com"
+    user_id = getattr(current_user, "id", "unknown_user")
+    user_email = getattr(current_user, "email", "unknown@example.com")
 
     uploaded = await files_service.upload_file(
-        user_id=test_user_id,
+        user_id=user_id,
         filename=file.filename,
         content=content,
         content_type=file.content_type,
-        uploader=test_user_email
+        uploader=user_email
     )
 
     if uploaded and file.filename.endswith((".xlsx", ".xls", ".csv")):
@@ -55,10 +55,11 @@ async def get_files(
     status: Optional[str] = Query(None, description="Filter by status"),
     file_type: Optional[str] = Query(None, description="Filter by file type"),
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(50, ge=1, le=100, description="Page size")
+    size: int = Query(50, ge=1, le=100, description="Page size"),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Get files - NO AUTH for testing"""
-    test_user_id = "test_user_123"
+    """Get files"""
+    user_id = getattr(current_user, "id", "unknown_user")
     
     try:
         filter_params = FileFilter(
@@ -67,7 +68,7 @@ async def get_files(
             file_type=file_type
         )
         
-        result = await files_service.get_files(test_user_id, filter_params, page, size)
+        result = await files_service.get_files(user_id, filter_params, page, size)
         return FileListResponse(**result)
         
     except Exception as e:
@@ -78,12 +79,12 @@ async def get_files(
         )
 
 @router.get("/{file_id}", response_model=FileDetailResponse)
-async def get_file(file_id: str):
-    """Get a specific file by ID - NO AUTH for testing"""
-    test_user_id = "test_user_123"
+async def get_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific file by ID"""
+    user_id = getattr(current_user, "id", "unknown_user")
     
     try:
-        file = await files_service.get_file_by_id(test_user_id, file_id)
+        file = await files_service.get_file_by_id(user_id, file_id)
         if not file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -93,19 +94,19 @@ async def get_file(file_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get file {file_id} for user {test_user_id}: {e}")
+        logger.error(f"Failed to get file {file_id} for user {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get file"
         )
 
 @router.delete("/{file_id}", response_model=dict)
-async def delete_file(file_id: str):
-    """Delete a file - NO AUTH for testing"""
-    test_user_id = "test_user_123"
+async def delete_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a file"""
+    user_id = getattr(current_user, "id", "unknown_user")
     
     try:
-        success = await files_service.delete_file(test_user_id, file_id)
+        success = await files_service.delete_file(user_id, file_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -117,20 +118,20 @@ async def delete_file(file_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to delete file {file_id} for user {test_user_id}: {e}")
+        logger.error(f"Failed to delete file {file_id} for user {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete file"
         )
 
 @router.get("/{file_id}/download")
-async def download_file(file_id: str):
-    """Download a file - NO AUTH for testing"""
-    test_user_id = "test_user_123"
+async def download_file(file_id: str, current_user: dict = Depends(get_current_user)):
+    """Download a file"""
+    user_id = getattr(current_user, "id", "unknown_user")
     
     try:
         # Get file content
-        content = await files_service.download_file(test_user_id, file_id)
+        content = await files_service.download_file(user_id, file_id)
         if content is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -138,7 +139,7 @@ async def download_file(file_id: str):
             )
         
         # Get file metadata for filename
-        file = await files_service.get_file_by_id(test_user_id, file_id)
+        file = await files_service.get_file_by_id(user_id, file_id)
         if not file:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -155,7 +156,7 @@ async def download_file(file_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to download file {file_id} for user {test_user_id}: {e}")
+        logger.error(f"Failed to download file {file_id} for user {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to download file"
