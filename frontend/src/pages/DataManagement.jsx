@@ -121,7 +121,9 @@ export default function DataManagement() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'success':
-        return <Badge className="bg-dashboard-success text-white"><CheckCircle className="w-3 h-3 mr-1" />Success</Badge>;
+      case 'processed':
+      case 'completed':
+        return <Badge className="bg-dashboard-success text-white"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
       case 'processing':
         return <Badge className="bg-dashboard-warning text-white"><BarChart3 className="w-3 h-3 mr-1" />Processing</Badge>;
       case 'error':

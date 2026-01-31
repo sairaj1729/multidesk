@@ -84,3 +84,14 @@ async def view_all_eisenhower(
             current_user.id,
             quadrant
         )
+
+@router.get("/debug-velocity")
+async def debug_task_velocity(current_user = Depends(get_current_user)):
+    """Debug endpoint to check task velocity calculation"""
+    try:
+        logger.info(f"Debugging task velocity for user: {current_user.id}")
+        velocity_data = await dashboard_service._calculate_real_task_velocity(current_user.id)
+        return {"velocity_data": [item.dict() for item in velocity_data]}
+    except Exception as e:
+        logger.error(f"Debug failed: {e}", exc_info=True)
+        raise
