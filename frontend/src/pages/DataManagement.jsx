@@ -18,7 +18,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DataPreviewDialog } from "@/components/data/DataPreviewDialog";
 import { FileUploadZone } from "@/components/data/FileUploadZone";
+import { JiraConnectionModal } from "@/components/data/JiraConnectionModal";
 import { filesService } from "@/services/files";
+import { jiraService } from "@/services/jira";
 
 const supportedFormats = [
   { name: "Excel Files", extension: ".xlsx", description: "Microsoft Excel Workbook" },
@@ -34,6 +36,8 @@ export default function DataManagement() {
   const [totalFiles, setTotalFiles] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
   const [processingCount, setProcessingCount] = useState(0);
+  const [showJiraModal, setShowJiraModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -67,15 +71,50 @@ export default function DataManagement() {
     }
   };
 
- const handleFileUpload = async (file) => {
-  const response = await filesService.uploadFile(file);
+  const handleFileUpload = async (file) => {
+    // Check JIRA connection first
+    const jiraCheck = await jiraService.checkJiraConnection();
+    
+    if (!jiraCheck.success || !jiraCheck.data?.connected) {
+      // Show modal and store the file for later upload
+      setPendingFile(file);
+      setShowJiraModal(true);
+      return;
+    }
+    
+    // Proceed with upload if JIRA is connected
+    await uploadFileDirectly(file);
+  };
 
-  if (!response || response.error) {
-    throw new Error(response?.error || "Upload failed");
-  }
+  const uploadFileDirectly = async (file) => {
+    try {
+      const response = await filesService.uploadFile(file);
 
-  fetchFiles(); // refresh list after success
-};
+      if (!response || response.error) {
+        throw new Error(response?.error || "Upload failed");
+      }
+
+      toast({
+        title: "File Uploaded",
+        description: "Your file has been uploaded successfully. Risk analysis will begin shortly.",
+      });
+
+      fetchFiles(); // refresh list after success
+    } catch (error) {
+      toast({
+        title: "Upload Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleJiraConnectSuccess = () => {
+    if (pendingFile) {
+      uploadFileDirectly(pendingFile);
+      setPendingFile(null);
+    }
+  };
 
 
 
@@ -255,7 +294,8 @@ export default function DataManagement() {
                 <span>Upload Data Files</span>
               </CardTitle>
               <CardDescription>
-                Securely upload Excel files containing employee records, task data, and project information
+                Securely upload Excel files containing employee records, task data, and project information.
+                JIRA connection is required for risk analysis.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -264,6 +304,9 @@ export default function DataManagement() {
                 accept=".xlsx,.xls,.csv"
                 maxSize={10 * 1024 * 1024}
               />
+              <p className="text-sm text-muted-foreground mt-2">
+                Note: JIRA connection is required for risk analysis of uploaded files.
+              </p>
             </CardContent>
           </Card>
 
@@ -416,6 +459,13 @@ export default function DataManagement() {
         open={!!previewDialog} 
         onClose={() => setPreviewDialog(null)} 
         file={previewDialog} 
+      />
+
+      {/* JIRA Connection Modal */}
+      <JiraConnectionModal 
+        open={showJiraModal} 
+        onOpenChange={setShowJiraModal}
+        onConnectSuccess={handleJiraConnectSuccess}
       />
 
       {/* Delete Confirmation Dialog */}

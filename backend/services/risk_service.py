@@ -18,7 +18,7 @@ def calculate_risk_level(score: int) -> str:
     return "LOW"
 
 
-async def run_risk_analysis():
+async def run_risk_analysis(user_id: str = None):
     """
     Advanced risk analysis based on:
     - Leave overlap
@@ -39,9 +39,13 @@ async def run_risk_analysis():
 
     # Track newly created risks in this run to avoid duplicates within the same execution
     created_risk_keys = set()
+    
+    # If user_id is provided, only process that user's data
+    user_filter = {"user_id": user_id} if user_id else {}
 
-    # Get all employee IDs from current leave records
-    leave_employees_cursor = leaves.find({}, {"employee_account_id": 1})
+    # Get all employee IDs from current leave records for this user
+    leave_filter = user_filter.copy() if user_filter else {}
+    leave_employees_cursor = leaves.find(leave_filter, {"employee_account_id": 1})
     leave_employee_ids = set()
     async for leave_record in leave_employees_cursor:
         if leave_record.get('employee_account_id'):
@@ -51,6 +55,10 @@ async def run_risk_analysis():
     
     # Only process tasks assigned to employees with leave data
     task_filter = {"assignee_account_id": {"$in": list(leave_employee_ids)}} if leave_employee_ids else {}
+    # Add user filter if provided
+    if user_filter:
+        task_filter.update(user_filter)
+    
     task_count = await tasks.count_documents(task_filter)
     leave_count = len(leave_employee_ids)
     logger.info(f"📊 Processing {task_count} tasks for {leave_count} employees with leave data")
@@ -175,11 +183,15 @@ async def run_risk_analysis():
                 logger.debug(f"⏭️ Skipping duplicate risk for {task['key']} (already created in this run)")
                 continue
             
-            # Check if a similar risk already exists in database
-            existing_risk = await risks.find_one({
+            # Check if a similar risk already exists in database for this user
+            risk_filter = {
                 "task_key": task["key"],
                 "assignee_account_id": assignee_id
-            })
+            }
+            if user_id:
+                risk_filter["user_id"] = user_id
+            
+            existing_risk = await risks.find_one(risk_filter)
             
             risk_doc = {
                 "task_key": task["key"],
@@ -197,6 +209,7 @@ async def run_risk_analysis():
                 "risk_score": risk_score,
                 "risk_level": risk_level,
                 "reasons": reasons,
+                "user_id": user_id,  # Add user ownership
 
                 "status": "OPEN",
                 "created_at": datetime.utcnow()

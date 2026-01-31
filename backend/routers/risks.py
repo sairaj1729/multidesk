@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from services.risk_service import run_risk_analysis
 from db import get_database
+from utils.dependencies import get_current_user
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,10 +12,11 @@ router = APIRouter(
 )
 
 @router.get("/check")
-async def check_risks():
-    """Trigger risk analysis - NO AUTH for testing"""
-    logger.info("🔍 Starting risk analysis...")
-    risks = await run_risk_analysis()
+async def check_risks(current_user: dict = Depends(get_current_user)):
+    """Trigger risk analysis for current user"""
+    user_id = getattr(current_user, "id", "unknown_user")
+    logger.info(f"🔍 Starting risk analysis for user {user_id}...")
+    risks = await run_risk_analysis(user_id)
     logger.info(f"✅ Risk analysis completed: {len(risks)} risks found")
 
     return {
@@ -25,13 +27,14 @@ async def check_risks():
 
 
 @router.get("")
-async def get_all_risks():
-    """Get all risk alerts - NO AUTH for testing"""
-    logger.info("📋 Fetching all risk alerts...")
+async def get_all_risks(current_user: dict = Depends(get_current_user)):
+    """Get risk alerts for current user"""
+    user_id = getattr(current_user, "id", "unknown_user")
+    logger.info(f"📋 Fetching risk alerts for user {user_id}...")
     db = get_database()
     risks = []
 
-    async for doc in db.risk_alerts.find().sort("created_at", -1):
+    async for doc in db.risk_alerts.find({"user_id": user_id}).sort("created_at", -1):
         doc["_id"] = str(doc["_id"])
         # Convert date objects to strings for JSON serialization
         if "due_date" in doc:

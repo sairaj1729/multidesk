@@ -44,7 +44,8 @@ async def upload_file(
         background_tasks.add_task(
             process_leave_file,
             uploaded.id,
-            file_path
+            file_path,
+            user_id
         )
 
     return uploaded

@@ -136,29 +136,18 @@ async def check_jira_connection(current_user = Depends(get_current_user)):
     try:
         credentials = await jira_service.get_jira_credentials(current_user.id)
         if not credentials or not credentials.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Jira credentials not found"
-            )
+            return {"connected": False, "message": "Jira credentials not found"}
         
         is_valid = await jira_service.validate_jira_connection(credentials)
         if not is_valid:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid Jira credentials"
-            )
+            return {"connected": False, "message": "Invalid Jira credentials"}
         
         # Return success response
-        return {"message": "Jira connection is valid"}
+        return {"connected": True, "message": "Jira connection is valid"}
         
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Jira connection check failed for user {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to check Jira connection"
-        )
+        return {"connected": False, "message": "Failed to check Jira connection"}
 
 @router.get("/issues/all/{project_key}")
 async def get_all_issues(project_key: str, current_user = Depends(get_current_user)):

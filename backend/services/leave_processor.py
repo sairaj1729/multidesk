@@ -7,7 +7,7 @@ from services.risk_service import run_risk_analysis
 
 logger = logging.getLogger(__name__)
 
-async def process_leave_file(file_id: str, file_path: str):
+async def process_leave_file(file_id: str, file_path: str, user_id: str):
     """Process leave file and trigger risk analysis"""
     db = get_database()
     leaves_collection = db.leaves
@@ -58,6 +58,7 @@ async def process_leave_file(file_id: str, file_path: str):
                     "leave_start": leave_start,
                     "leave_end": leave_end,
                     "file_id": file_id,
+                    "user_id": user_id,  # Add user ownership
                     "uploaded_at": datetime.utcnow()
                 }
                 records.append(record)
@@ -93,7 +94,7 @@ async def process_leave_file(file_id: str, file_path: str):
         # Trigger risk analysis after processing leaves
         logger.info("Triggering risk analysis after leave processing...")
         try:
-            risks_created = await run_risk_analysis()
+            risks_created = await run_risk_analysis(user_id)
             logger.info(f"Risk analysis completed: {len(risks_created)} new risks created")
         except Exception as risk_error:
             logger.error(f"Risk analysis failed: {risk_error}")

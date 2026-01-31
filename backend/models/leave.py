@@ -6,4 +6,5 @@ class Leave(BaseModel):
     leave_start: date
     leave_end: date
     file_id: str
+    user_id: str  # Add user ownership
     uploaded_at: datetime

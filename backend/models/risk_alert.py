@@ -10,4 +10,5 @@ class RiskAlert(BaseModel):
     leave_end: date
     risk_level: str
     status: str
+    user_id: str  # Add user ownership
     created_at: datetime

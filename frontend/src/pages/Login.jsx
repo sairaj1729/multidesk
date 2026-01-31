@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { authService } from "@/services/auth";
+import { PostLoginJiraSetup } from "@/components/auth/PostLoginJiraSetup";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
@@ -15,6 +16,7 @@ export default function Login() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showJiraSetup, setShowJiraSetup] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -41,7 +43,8 @@ export default function Login() {
         
         // Check if user is verified
         if (result.data.user.is_verified) {
-          navigate("/dashboard");
+          // Show JIRA setup modal after login
+          setShowJiraSetup(true);
         } else {
           navigate("/verify-email", { state: { email: formData.email } });
         }
@@ -179,6 +182,13 @@ export default function Login() {
           <p>© 2024 Multi Desk. All rights reserved.</p>
         </div> */}
       </div>
+      
+      {/* Post-Login JIRA Setup Modal */}
+      <PostLoginJiraSetup 
+        open={showJiraSetup} 
+        onOpenChange={setShowJiraSetup}
+        onSetupComplete={() => navigate("/dashboard")}
+      />
     </div>
   );
 }

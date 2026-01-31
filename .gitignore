@@ -36,3 +36,5 @@ __pycache__/
 
 # Upload directory (contains user data)
 uploads/
+
+.qoder
