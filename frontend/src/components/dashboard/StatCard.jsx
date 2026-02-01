@@ -9,6 +9,8 @@ export function StatCard({ title, value, subtitle, trend, variant = "default" })
         return "border-l-4 border-l-dashboard-warning";
       case "danger":
         return "border-l-4 border-l-dashboard-danger";
+      case "info":
+        return "border-l-4 border-l-blue-500";
       default:
         return "border-l-4 border-l-muted-foreground/30";
     }

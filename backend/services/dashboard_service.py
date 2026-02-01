@@ -73,6 +73,12 @@ class DashboardService:
             # Get total tasks
             total_tasks = await tasks_collection.count_documents({"user_id": user_id})
             
+            # Get TODO tasks
+            todo_tasks = await tasks_collection.count_documents({
+                "user_id": user_id,
+                "status": {"$in": ["To Do", "Todo", "TO DO"]}
+            })
+            
             # Get tasks in progress
             in_progress_tasks = await tasks_collection.count_documents({
                 "user_id": user_id,
@@ -94,16 +100,19 @@ class DashboardService:
             
             # Calculate trends (simplified - in a real app, you'd compare with previous period)
             total_tasks_trend = 4.5  # Simulated trend
+            todo_tasks_trend = 15.2
             in_progress_tasks_trend = 8.2
             completed_tasks_trend = 12.3
             overdue_tasks_trend = 16.3
             
             return DashboardStats(
                 total_tasks=total_tasks,
+                todo_tasks=todo_tasks,
                 in_progress_tasks=in_progress_tasks,
                 completed_tasks=completed_tasks,
                 overdue_tasks=overdue_tasks,
                 total_tasks_trend=total_tasks_trend,
+                todo_tasks_trend=todo_tasks_trend,
                 in_progress_tasks_trend=in_progress_tasks_trend,
                 completed_tasks_trend=completed_tasks_trend,
                 overdue_tasks_trend=overdue_tasks_trend
@@ -114,10 +123,12 @@ class DashboardService:
             # Return default values
             return DashboardStats(
                 total_tasks=0,
+                todo_tasks=0,
                 in_progress_tasks=0,
                 completed_tasks=0,
                 overdue_tasks=0,
                 total_tasks_trend=0.0,
+                todo_tasks_trend=0.0,
                 in_progress_tasks_trend=0.0,
                 completed_tasks_trend=0.0,
                 overdue_tasks_trend=0.0

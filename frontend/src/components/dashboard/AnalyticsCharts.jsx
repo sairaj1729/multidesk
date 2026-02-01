@@ -14,37 +14,76 @@ import {
   Legend,
 } from "recharts";
 
-// Default data for fallback
+// Default data for fallback with improved colors
 const defaultTasksByStatusData = [
-  { name: "Pending", value: 25, fill: "hsl(var(--chart-4))" },
-  { name: "In Progress", value: 45, fill: "hsl(var(--chart-3))" },
-  { name: "Done", value: 85, fill: "hsl(var(--chart-2))" },
-  { name: "Verified", value: 15, fill: "hsl(var(--chart-1))" },
+  { name: "To Do", value: 30, fill: "#3b82f6" },    // Blue for TODO
+  { name: "In Progress", value: 45, fill: "#f59e0b" }, // Amber for In Progress
+  { name: "Done", value: 60, fill: "#10b981" },    // Emerald for Done
+  { name: "Blocked", value: 15, fill: "#ef4444" },  // Red for Blocked
 ];
 
 const defaultTaskVelocityData = [
-  { month: "Jan", tasks: 40, completed: 35 },
-  { month: "Feb", tasks: 45, completed: 40 },
-  { month: "Mar", tasks: 38, completed: 42 },
-  { month: "Apr", tasks: 55, completed: 48 },
-  { month: "May", tasks: 52, completed: 55 },
-  { month: "Jun", tasks: 48, completed: 50 },
+  { month: "Aug", tasks: 30, completed: 25 },
+  { month: "Sep", tasks: 35, completed: 28 },
+  { month: "Oct", tasks: 40, completed: 32 },
+  { month: "Nov", tasks: 45, completed: 38 },
+  { month: "Dec", tasks: 38, completed: 30 },
+  { month: "Jan", tasks: 32, completed: 28 },
 ];
 
 const defaultIssueTypeData = [
-  { name: "Story", value: 45, fill: "hsl(var(--chart-1))" },
-  { name: "Bug", value: 25, fill: "hsl(var(--chart-4))" },
-  { name: "Task", value: 20, fill: "hsl(var(--chart-2))" },
-  { name: "Epic", value: 10, fill: "hsl(var(--chart-3))" },
+  { name: "Task", value: 35, fill: "#6366f1" },     // Indigo for Task
+  { name: "Story", value: 40, fill: "#8b5cf6" },   // Violet for Story
+  { name: "Epic", value: 15, fill: "#ec4899" },    // Pink for Epic
+  { name: "Bug", value: 10, fill: "#f97316" },     // Orange for Bug
 ];
 
 export function AnalyticsCharts({ data }) {
+  // Color mapping for common status values
+  const getStatusColor = (status) => {
+    const colorMap = {
+      "To Do": "#3b82f6",      // Blue
+      "Todo": "#3b82f6",       // Blue
+      "TO DO": "#3b82f6",      // Blue
+      "In Progress": "#f59e0b", // Amber
+      "In Review": "#f59e0b",  // Amber
+      "In Development": "#f59e0b", // Amber
+      "Done": "#10b981",       // Emerald
+      "Closed": "#10b981",     // Emerald
+      "Resolved": "#10b981",   // Emerald
+      "Blocked": "#ef4444",    // Red
+      "Open": "#8b5cf6",       // Violet
+      "Backlog": "#6366f1",    // Indigo
+      "Ready": "#10ac84",      // Green
+      "Cancelled": "#6b7280",  // Gray
+      "Deferred": "#9ca3af",   // Gray
+      default: "#94a3b8"       // Slate
+    };
+    return colorMap[status] || colorMap.default;
+  };
+
+  // Color mapping for issue types
+  const getIssueTypeColor = (type) => {
+    const colorMap = {
+      "Task": "#6366f1",       // Indigo
+      "Story": "#8b5cf6",      // Violet
+      "Epic": "#ec4899",       // Pink
+      "Bug": "#f97316",        // Orange
+      "Sub-task": "#0ea5e9",   // Sky
+      "Subtask": "#0ea5e9",    // Sky
+      "Feature": "#10b981",    // Emerald
+      "Improvement": "#84cc16", // Lime
+      default: "#94a3b8"       // Slate
+    };
+    return colorMap[type] || colorMap.default;
+  };
+
   // Use real data if provided, otherwise use defaults
   const tasksByStatusData = data?.tasks_by_status?.length > 0 
-    ? data.tasks_by_status.map((item, index) => ({
+    ? data.tasks_by_status.map(item => ({
         name: item.name,
         value: item.value,
-        fill: `hsl(var(--chart-${(index % 4) + 1}))`
+        fill: getStatusColor(item.name)
       }))
     : defaultTasksByStatusData;
 
@@ -57,10 +96,10 @@ export function AnalyticsCharts({ data }) {
     : defaultTaskVelocityData;
 
   const issueTypeData = data?.issue_type_distribution?.length > 0
-    ? data.issue_type_distribution.map((item, index) => ({
+    ? data.issue_type_distribution.map(item => ({
         name: item.name,
         value: item.value,
-        fill: `hsl(var(--chart-${(index % 4) + 1}))`
+        fill: getIssueTypeColor(item.name)
       }))
     : defaultIssueTypeData;
 
@@ -115,17 +154,17 @@ export function AnalyticsCharts({ data }) {
                   type="monotone"
                   dataKey="tasks"
                   name="Tasks"
-                  stroke="hsl(var(--chart-1))"
+                  stroke="#3b82f6"
                   strokeWidth={2}
-                  dot={{ fill: "hsl(var(--chart-1))", strokeWidth: 2, r: 4 }}
+                  dot={{ fill: "#3b82f6", strokeWidth: 2, r: 4 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="completed"
                   name="Completed"
-                  stroke="hsl(var(--chart-2))"
+                  stroke="#10b981"
                   strokeWidth={2}
-                  dot={{ fill: "hsl(var(--chart-2))", strokeWidth: 2, r: 4 }}
+                  dot={{ fill: "#10b981", strokeWidth: 2, r: 4 }}
                 />
               </LineChart>
             </ResponsiveContainer>

@@ -123,13 +123,20 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard
           title="Total Jira Tasks"
           value={stats.total_tasks || 0}
           subtitle="All active tasks"
           trend={stats.total_tasks_trend ? `↑ +${stats.total_tasks_trend}%` : ""}
           variant="primary"
+        />
+        <StatCard
+          title="TODO Tasks"
+          value={stats.todo_tasks || 0}
+          subtitle="Tasks pending start"
+          trend={stats.todo_tasks_trend ? `↑ +${stats.todo_tasks_trend}%` : ""}
+          variant="info"
         />
         <StatCard
           title="Tasks In Progress"

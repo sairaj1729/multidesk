@@ -64,10 +64,12 @@ class JiraUser(BaseModel):
 
 class DashboardStats(BaseModel):
     total_tasks: int
+    todo_tasks: int
     in_progress_tasks: int
     completed_tasks: int
     overdue_tasks: int
     total_tasks_trend: float
+    todo_tasks_trend: float
     in_progress_tasks_trend: float
     completed_tasks_trend: float
     overdue_tasks_trend: float
