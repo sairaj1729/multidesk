@@ -13,7 +13,18 @@ const RiskIndicator = () => {
     fetchRiskCount();
     // Set up polling to check for new risks
     const interval = setInterval(fetchRiskCount, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
+    
+    // Listen for risk-update events to refresh immediately
+    const handleRiskUpdate = () => {
+      fetchRiskCount();
+    };
+    
+    window.addEventListener('risk-update', handleRiskUpdate);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('risk-update', handleRiskUpdate);
+    };
   }, []);
 
   const fetchRiskCount = async () => {
@@ -31,7 +42,7 @@ const RiskIndicator = () => {
     navigate('/risks');
   };
 
-  // Don't show the indicator if there are no risks or still loading
+  // Show the indicator only when there are risks
   if (loading || riskCount === 0) {
     return null;
   }

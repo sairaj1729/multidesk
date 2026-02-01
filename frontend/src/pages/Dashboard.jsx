@@ -47,6 +47,15 @@ export default function Dashboard() {
         });
         // Refresh dashboard data after sync
         fetchDashboardData();
+        
+        // If risks were analyzed as part of sync, we might want to update risk indicator
+        if (response.data && response.data.risks_analyzed) {
+          // Optionally refresh risk count after a short delay to allow processing
+          setTimeout(() => {
+            // This will trigger the risk indicator to update
+            window.dispatchEvent(new Event('risk-update'));
+          }, 2000);
+        }
       } else {
         toast({
           title: "Sync Failed",

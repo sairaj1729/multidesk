@@ -33,9 +33,20 @@ async def connect_jira(credentials: JiraCredentialsCreate, current_user = Depend
         if not sync_success:
             logger.warning(f"Initial sync failed for user {current_user.id}")
         
+        if sync_success:
+            # Trigger risk analysis after successful initial sync
+            from services.risk_service import run_risk_analysis
+            logger.info(f"Triggering risk analysis after initial Jira sync for user {current_user.id}")
+            try:
+                risk_result = await run_risk_analysis(current_user.id)
+                logger.info(f"Risk analysis completed after initial sync: {risk_result['count']} risks processed")
+            except Exception as risk_error:
+                logger.error(f"Risk analysis failed after initial sync: {risk_error}")
+        
         return {
             "message": "Jira connected successfully",
-            "sync_status": "success" if sync_success else "failed"
+            "sync_status": "success" if sync_success else "failed",
+            "risks_analyzed": sync_success  # Indicate if risk analysis was attempted
         }
         
     except HTTPException:
@@ -85,7 +96,16 @@ async def sync_jira_data(current_user = Depends(get_current_user)):
         success = await jira_service.sync_jira_data(current_user.id)
         
         if success:
-            return {"message": "Jira data synced successfully"}
+            # Trigger risk analysis after successful sync
+            from services.risk_service import run_risk_analysis
+            logger.info(f"Triggering risk analysis after Jira sync for user {current_user.id}")
+            try:
+                risk_result = await run_risk_analysis(current_user.id)
+                logger.info(f"Risk analysis completed after sync: {risk_result['count']} risks processed")
+            except Exception as risk_error:
+                logger.error(f"Risk analysis failed after sync: {risk_error}")
+            
+            return {"message": "Jira data synced successfully", "risks_analyzed": True}
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

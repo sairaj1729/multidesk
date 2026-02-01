@@ -32,6 +32,7 @@ class ApiService {
     try {
       console.log('Making API request to:', url);
       console.log('Request config:', config);
+      console.log('Token from localStorage:', localStorage.getItem('access_token'));
       
       const response = await fetch(url, config);
       console.log('Response status:', response.status);

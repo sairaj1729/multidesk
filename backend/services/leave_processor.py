@@ -94,8 +94,8 @@ async def process_leave_file(file_id: str, file_path: str, user_id: str):
         # Trigger risk analysis after processing leaves
         logger.info("Triggering risk analysis after leave processing...")
         try:
-            risks_created = await run_risk_analysis(user_id)
-            logger.info(f"Risk analysis completed: {len(risks_created)} new risks created")
+            risk_result = await run_risk_analysis(user_id)
+            logger.info(f"Risk analysis completed: {risk_result['count']} new risks created")
         except Exception as risk_error:
             logger.error(f"Risk analysis failed: {risk_error}")
 

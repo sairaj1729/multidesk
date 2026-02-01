@@ -196,8 +196,8 @@ class FilesService:
             # Trigger risk analysis after deleting leaves
             logger.info("Triggering risk analysis after deleting leave records...")
             try:
-                risks_created = await run_risk_analysis()
-                logger.info(f"Risk analysis completed after deletion: {len(risks_created)} risks created")
+                risk_result = await run_risk_analysis(user_id)
+                logger.info(f"Risk analysis completed after deletion: {risk_result['count']} risks analyzed")
             except Exception as risk_error:
                 logger.error(f"Risk analysis failed after deletion: {risk_error}")
             

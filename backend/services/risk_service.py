@@ -21,12 +21,13 @@ def calculate_risk_level(score: int) -> str:
 async def run_risk_analysis(user_id: str = None):
     """
     Advanced risk analysis based on:
-    - Leave overlap
+    - Leave overlap (when leave data exists)
     - Due date proximity
     - Story points
     - Priority
     - Status
     - Start date delay
+    - Unassigned tasks
     """
 
     db = get_database()
@@ -52,17 +53,14 @@ async def run_risk_analysis(user_id: str = None):
             leave_employee_ids.add(leave_record['employee_account_id'])
     
     logger.info(f"📋 Found {len(leave_employee_ids)} unique employees with leave data: {list(leave_employee_ids)[:10]}...")
-    
-    # Only process tasks assigned to employees with leave data
-    task_filter = {"assignee_account_id": {"$in": list(leave_employee_ids)}} if leave_employee_ids else {}
-    # Add user filter if provided
-    if user_filter:
-        task_filter.update(user_filter)
-    
+
+    # Process ALL tasks for the user (not just those assigned to employees with leave data)
+    # This allows us to calculate risks based on due dates, priority, status, etc. without leave data
+    task_filter = user_filter.copy()  # Process all tasks for this user
     task_count = await tasks.count_documents(task_filter)
     leave_count = len(leave_employee_ids)
-    logger.info(f"📊 Processing {task_count} tasks for {leave_count} employees with leave data")
-    
+    logger.info(f"📊 Processing {task_count} tasks for risk analysis (including tasks without leave data)")
+
     async for task in tasks.find(task_filter):
         risk_score = 0
         reasons = []
@@ -86,9 +84,9 @@ async def run_risk_analysis(user_id: str = None):
             reasons.append("Task unassigned")
 
         # -----------------------------
-        # 1️⃣ LEAVE OVERLAP
+        # 1️⃣ LEAVE OVERLAP (only if leave data exists for this assignee)
         # -----------------------------
-        if assignee_id and due_date:
+        if assignee_id and due_date and assignee_id in leave_employee_ids:
             logger.debug(f"🔍 Checking leave overlap for task {task['key']} (assignee: {assignee_id}, due: {due_date})")
             
             leave = await leaves.find_one({
@@ -110,7 +108,7 @@ async def run_risk_analysis(user_id: str = None):
                     logger.debug(f"❌ No leaves found for assignee {assignee_id}")
 
         # -----------------------------
-        # 2️⃣ DUE DATE PROXIMITY
+        # 2️⃣ DUE DATE PROXIMITY (ALWAYS CALCULATED)
         # -----------------------------
         if due_date:
             days_left = (due_date.date() - today).days
@@ -124,9 +122,12 @@ async def run_risk_analysis(user_id: str = None):
             elif days_left <= 10:
                 risk_score += 10
                 reasons.append("Due in ≤ 10 days")
+            elif days_left < 0:  # Overdue
+                risk_score += 30
+                reasons.append("Task is overdue")
 
         # -----------------------------
-        # 3️⃣ STORY POINT COMPLEXITY
+        # 3️⃣ STORY POINT COMPLEXITY (ALWAYS CALCULATED)
         # -----------------------------
         if story_points:
             if story_points >= 13:
@@ -140,7 +141,7 @@ async def run_risk_analysis(user_id: str = None):
                 reasons.append("Medium effort task")
 
         # -----------------------------
-        # 4️⃣ PRIORITY
+        # 4️⃣ PRIORITY (ALWAYS CALCULATED)
         # -----------------------------
         if priority == "Highest":
             risk_score += 20
@@ -150,7 +151,7 @@ async def run_risk_analysis(user_id: str = None):
             reasons.append("High priority")
 
         # -----------------------------
-        # 5️⃣ STATUS RISK
+        # 5️⃣ STATUS RISK (ALWAYS CALCULATED)
         # -----------------------------
         if status == "Blocked":
             risk_score += 25
@@ -158,9 +159,13 @@ async def run_risk_analysis(user_id: str = None):
         elif status in ["In Progress", "In Review"]:
             risk_score += 10
             reasons.append("Task in active state")
+        elif status == "To Do" and due_date and (due_date.date() - today).days <= 3:
+            # High risk if "To Do" task is due soon
+            risk_score += 20
+            reasons.append("To Do task due very soon")
 
         # -----------------------------
-        # 6️⃣ START DATE DELAY
+        # 6️⃣ START DATE DELAY (ALWAYS CALCULATED)
         # -----------------------------
         if start_date and due_date:
             total_days = (due_date.date() - start_date.date()).days
@@ -175,8 +180,8 @@ async def run_risk_analysis(user_id: str = None):
         # -----------------------------
         risk_level = calculate_risk_level(risk_score)
 
-        if risk_level in ["CRITICAL", "HIGH"]:
-            risk_key = f"{task['key']}_{assignee_id}"
+        if risk_level in ["CRITICAL", "HIGH", "MEDIUM"]:
+            risk_key = f"{task['key']}_{assignee_id or 'unassigned'}"
             
             # Skip if we already created a risk for this task-assignee combination in this run
             if risk_key in created_risk_keys:
@@ -201,8 +206,8 @@ async def run_risk_analysis(user_id: str = None):
                 "assignee": assignee_name,
                 "start_date": start_date,
                 "due_date": due_date,
-                "leave_start": leave.get("leave_start") if leave else None,
-                "leave_end": leave.get("leave_end") if leave else None,
+                "leave_start": leave.get("leave_start").date().isoformat() if leave and leave.get("leave_start") else None,
+                "leave_end": leave.get("leave_end").date().isoformat() if leave and leave.get("leave_end") else None,
 
                 # Risk logic
                 "assignee_account_id": assignee_id,

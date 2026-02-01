@@ -344,7 +344,7 @@ export default function DataManagement() {
                       <span>{new Date(file.uploaded_at).toLocaleDateString()}</span>
                     </div>
                     <div className="flex items-center space-x-1">
-                      <Button 
+                      {/* <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => handlePreview(file)}
@@ -357,7 +357,7 @@ export default function DataManagement() {
                         onClick={() => handleDownload(file)}
                       >
                         <Download className="w-4 h-4" />
-                      </Button>
+                      </Button> */}
                       <Button 
                         variant="ghost" 
                         size="sm"

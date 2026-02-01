@@ -52,11 +52,14 @@ const Risks = () => {
   const fetchRisks = async () => {
     try {
       setLoading(true);
+      console.log('Fetching risks...');
       const data = await riskService.getAllRisks();
+      console.log('Received risks data:', data);
+      console.log('Number of risks:', data.length);
       setRisks(data);
     } catch (err) {
       setError('Failed to fetch risks');
-      console.error(err);
+      console.error('Error fetching risks:', err);
     } finally {
       setLoading(false);
     }
@@ -107,18 +110,60 @@ const Risks = () => {
     );
   }
 
+  const refreshRisks = async () => {
+    try {
+      setLoading(true);
+      console.log('Refreshing risks...');
+      const data = await riskService.getAllRisks();
+      console.log('Received refreshed risks data:', data);
+      console.log('Number of refreshed risks:', data.length);
+      setRisks(data);
+    } catch (err) {
+      setError('Failed to fetch risks');
+      console.error('Error fetching risks:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runRiskAnalysis = async () => {
+    try {
+      setLoading(true);
+      console.log('Running risk analysis...');
+      const result = await riskService.checkRisks();
+      console.log('Risk analysis result:', result);
+      // Refresh the risks after analysis
+      await refreshRisks();
+    } catch (err) {
+      setError('Failed to run risk analysis');
+      console.error('Error running risk analysis:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Risk Alerts</h2>
-        <Badge variant="secondary" className="text-lg py-1 px-3">
-          <AlertTriangle className="mr-2 h-4 w-4" />
-          {risks.length} Active Risks
-        </Badge>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runRiskAnalysis}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            {loading ? 'Analyzing...' : 'Run Risk Analysis'}
+          </button>
+          <Badge variant="secondary" className="text-lg py-1 px-3">
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            {risks.length} Active Risks
+          </Badge>
+        </div>
       </div>
 
       <p className="text-muted-foreground">
-        These tasks may be delayed due to upcoming employee leaves. Review and take appropriate action.
+        These tasks pose potential risks based on due dates, priorities, status, and employee leaves. Review and take appropriate action.
       </p>
 
       {risks.length === 0 ? (
@@ -127,7 +172,7 @@ const Risks = () => {
             <AlertTriangle className="h-12 w-12 text-green-500 mb-4" />
             <h3 className="text-xl font-semibold mb-2">No Active Risks</h3>
             <p className="text-muted-foreground text-center">
-              All tasks are on track. No conflicts with employee leaves detected.
+              All tasks are on track. No conflicts with employee leaves or deadline risks detected.
             </p>
           </CardContent>
         </Card>
@@ -148,7 +193,7 @@ const Risks = () => {
         <span className="font-mono text-sm text-muted-foreground">
           {risk.task_key}
         </span>
-        <span className="truncate">{risk.task_title}</span>
+        <span className="truncate break-words whitespace-normal">{risk.task_title}</span>
       </CardTitle>
 
       <Badge className={riskStyles[risk.risk_level]?.badge}>
