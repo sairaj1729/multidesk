@@ -171,6 +171,8 @@ class ReportsService:
                 data_points, summary = await self._generate_time_tracking_report(user_id, request)
             elif request.report_type == "resource_utilization":
                 data_points, summary = await self._generate_resource_utilization_report(user_id, request)
+            elif request.report_type == "risk_analysis":
+                data_points, summary = await self._generate_risk_analysis_report(user_id, request)
             
             # Store report data
             if data_points:
@@ -229,6 +231,13 @@ class ReportsService:
             if request.project_key:
                 query["project_key"] = request.project_key
             
+            if request.user_id:
+                # Match on either assignee_account_id or assignee name/email
+                query["$or"] = [
+                    {"assignee_account_id": request.user_id},
+                    {"assignee": request.user_id}  # For backward compatibility
+                ]
+            
             if request.start_date or request.end_date:
                 date_query = {}
                 if request.start_date:
@@ -254,6 +263,11 @@ class ReportsService:
                     status=doc["status"],
                     priority=doc["priority"],
                     assignee=doc["assignee"],
+                    assignee_account_id=doc.get("assignee_account_id"),
+                    assignee_email=doc.get("assignee_email"),
+                    story_points=doc.get("story_points"),
+                    start_date=doc.get("start_date"),
+                    sprint=doc.get("sprint"),
                     created=doc["created"],
                     updated=doc["updated"],
                     duedate=doc["duedate"],
@@ -330,7 +344,11 @@ class ReportsService:
             query = {"user_id": user_id}
             
             if request.user_id:
-                query["assignee_id"] = request.user_id
+                # Match on either assignee_account_id or assignee name/email
+                query["$or"] = [
+                    {"assignee_account_id": request.user_id},
+                    {"assignee": request.user_id}  # For backward compatibility
+                ]
             elif request.project_key:
                 query["project_key"] = request.project_key
             
@@ -349,6 +367,11 @@ class ReportsService:
                     status=doc["status"],
                     priority=doc["priority"],
                     assignee=doc["assignee"],
+                    assignee_account_id=doc.get("assignee_account_id"),
+                    assignee_email=doc.get("assignee_email"),
+                    story_points=doc.get("story_points"),
+                    start_date=doc.get("start_date"),
+                    sprint=doc.get("sprint"),
                     created=doc["created"],
                     updated=doc["updated"],
                     duedate=doc["duedate"],
@@ -358,9 +381,12 @@ class ReportsService:
                 )
                 tasks.append(task)
                 
-                # Count tasks per user
-                assignee = task.assignee or "Unassigned"
-                user_task_counts[assignee] = user_task_counts.get(assignee, 0) + 1
+                # Count tasks per user - prioritize using account_id if available
+                assignee_id = task.assignee_account_id or task.assignee or "Unassigned"
+                assignee_display = task.assignee or "Unassigned"
+                
+                # Use display name for the count dictionary
+                user_task_counts[assignee_display] = user_task_counts.get(assignee_display, 0) + 1
             
             # Create data points
             data_points = []
@@ -396,117 +422,236 @@ class ReportsService:
             db = get_database()
             tasks_collection = db.jira_tasks
             
+            # Build query - filter by user_id first
+            query = {"user_id": user_id}
+            
+            # Add project filter if specified
+            if request.project_key:
+                query["project_key"] = request.project_key
+            
+            # Add user assignment filter if specified
+            if request.user_id:
+                # Match on either assignee_account_id or assignee name/email
+                query["$or"] = [
+                    {"assignee_account_id": request.user_id},
+                    {"assignee": request.user_id}  # For backward compatibility
+                ]
+            
+            # Debug logging
+            logger.info(f"Project progress report query for user {user_id}: {query}")
+            
+            # Get all tasks matching the criteria
+            tasks_cursor = tasks_collection.find(query)
+            tasks = []
+            async for task in tasks_cursor:
+                tasks.append(task)
+            
+            logger.info(f"Found {len(tasks)} tasks for project progress report")
+            
+            if not tasks:
+                logger.warning(f"No tasks found for user {user_id} with query: {query}")
+                return [], {"total_projects": 0, "average_completion_rate": 0, "projects": [], "message": "No tasks found matching the criteria"}
+            
+            # Group tasks by project
+            projects = {}
+            for task in tasks:
+                project_key = task.get('project_key')
+                project_name = task.get('project_name', 'Unknown Project')
+                
+                if project_key:
+                    if project_key not in projects:
+                        projects[project_key] = {
+                            'project_name': project_name,
+                            'total_tasks': 0,
+                            'completed_tasks': 0,
+                            'in_progress_tasks': 0,
+                            'todo_tasks': 0,
+                            'other_tasks': 0
+                        }
+                    
+                    projects[project_key]['total_tasks'] += 1
+                    
+                    # Categorize by status
+                    status = task.get('status', '').lower()
+                    if status in ['done', 'closed', 'resolved']:
+                        projects[project_key]['completed_tasks'] += 1
+                    elif status in ['in progress', 'in review']:
+                        projects[project_key]['in_progress_tasks'] += 1
+                    elif status in ['to do', 'todo']:
+                        projects[project_key]['todo_tasks'] += 1
+                    else:
+                        projects[project_key]['other_tasks'] += 1
+            
+            # Create data points and project data
+            project_data = []
+            data_points = []
+            
+            for project_key, project_info in projects.items():
+                # Calculate completion rate
+                completion_rate = round((project_info['completed_tasks'] / project_info['total_tasks'] * 100) if project_info['total_tasks'] > 0 else 0, 2)
+                
+                # Add completion rate to project info
+                project_info['completion_rate'] = completion_rate
+                project_info['project_key'] = project_key
+                
+                project_data.append(project_info)
+                
+                # Create data points for visualization
+                data_points.append(ReportDataPoint(
+                    label=f"Project: {project_info['project_name']} (Total Tasks)",
+                    value=project_info['total_tasks'],
+                    metadata={"category": "project_total", "project_key": project_key}
+                ))
+                
+                data_points.append(ReportDataPoint(
+                    label=f"Project: {project_info['project_name']} (Completed)",
+                    value=project_info['completed_tasks'],
+                    metadata={"category": "project_completed", "project_key": project_key}
+                ))
+                
+                data_points.append(ReportDataPoint(
+                    label=f"Project: {project_info['project_name']} (In Progress)",
+                    value=project_info['in_progress_tasks'],
+                    metadata={"category": "project_in_progress", "project_key": project_key}
+                ))
+                
+                data_points.append(ReportDataPoint(
+                    label=f"Project: {project_info['project_name']} (To Do)",
+                    value=project_info['todo_tasks'],
+                    metadata={"category": "project_todo", "project_key": project_key}
+                ))
+                
+                data_points.append(ReportDataPoint(
+                    label=f"Project: {project_info['project_name']} (Completion %)",
+                    value=completion_rate,
+                    metadata={"category": "project_completion", "project_key": project_key}
+                ))
+            
+            # Calculate summary statistics
+            total_projects = len(project_data)
+            if total_projects > 0:
+                avg_completion_rate = round(sum(p['completion_rate'] for p in project_data) / total_projects, 2)
+                total_tasks_all_projects = sum(p['total_tasks'] for p in project_data)
+                total_completed_all_projects = sum(p['completed_tasks'] for p in project_data)
+                overall_completion_rate = round((total_completed_all_projects / total_tasks_all_projects * 100) if total_tasks_all_projects > 0 else 0, 2)
+            else:
+                avg_completion_rate = 0
+                overall_completion_rate = 0
+                total_tasks_all_projects = 0
+                total_completed_all_projects = 0
+            
+            summary = {
+                "total_projects": total_projects,
+                "average_completion_rate": avg_completion_rate,
+                "overall_completion_rate": overall_completion_rate,
+                "total_tasks": total_tasks_all_projects,
+                "completed_tasks": total_completed_all_projects,
+                "projects": project_data,
+                "filters_applied": {
+                    "user_id": user_id,
+                    "project_key": request.project_key,
+                    "assignee_filter": request.user_id
+                }
+            }
+            
+            logger.info(f"Project progress report generated successfully for user {user_id}")
+            logger.info(f"Summary: {total_projects} projects, {total_tasks_all_projects} total tasks, {overall_completion_rate}% overall completion")
+            
+            return data_points, summary
+            
+        except Exception as e:
+            logger.error(f"Failed to generate project progress report for user {user_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return [], {"error": str(e), "total_projects": 0, "average_completion_rate": 0}
+
+    async def _generate_time_tracking_report(self, user_id: str, request: ReportGenerationRequest) -> tuple:
+        """Generate time tracking report"""
+        try:
+            db = get_database()
+            tasks_collection = db.jira_tasks
+            
             # Build query
             query = {"user_id": user_id}
             
             if request.project_key:
                 query["project_key"] = request.project_key
             
-            # Get tasks grouped by project
-            pipeline = [
-                {"$match": query},
-                {"$group": {
-                    "_id": "$project_key",
-                    "project_name": {"$first": "$project_name"},
-                    "total_tasks": {"$sum": 1},
-                    "completed_tasks": {"$sum": {"$cond": [
-                        {"$in": ["$status", ["Done", "Closed", "Resolved"]]},
-                        1,
-                        0
-                    ]}},
-                    "in_progress_tasks": {"$sum": {"$cond": [
-                        {"$in": ["$status", ["In Progress", "In Review"]]},
-                        1,
-                        0
-                    ]}}
-                }}
-            ]
+            if request.user_id:
+                # Match on either assignee_account_id or assignee name/email
+                query["$or"] = [
+                    {"assignee_account_id": request.user_id},
+                    {"assignee": request.user_id}  # For backward compatibility
+                ]
             
-            cursor = tasks_collection.aggregate(pipeline)
-            project_data = []
-            data_points = []
+            # Get tasks
+            cursor = tasks_collection.find(query)
+            tasks = []
+            total_estimated_hours = 0
+            total_story_points = 0
             
             async for doc in cursor:
-                project_info = {
-                    "project_key": doc["_id"],
-                    "project_name": doc["project_name"],
-                    "total_tasks": doc["total_tasks"],
-                    "completed_tasks": doc["completed_tasks"],
-                    "in_progress_tasks": doc["in_progress_tasks"],
-                    "completion_rate": round((doc["completed_tasks"] / doc["total_tasks"] * 100) if doc["total_tasks"] > 0 else 0, 2)
-                }
-                project_data.append(project_info)
+                task = JiraTask(
+                    id=str(doc["_id"]),
+                    user_id=doc["user_id"],
+                    jira_id=doc["jira_id"],
+                    key=doc["key"],
+                    summary=doc["summary"],
+                    status=doc["status"],
+                    priority=doc["priority"],
+                    assignee=doc["assignee"],
+                    assignee_account_id=doc.get("assignee_account_id"),
+                    assignee_email=doc.get("assignee_email"),
+                    story_points=doc.get("story_points"),
+                    created=doc["created"],
+                    updated=doc["updated"],
+                    duedate=doc["duedate"],
+                    project_key=doc["project_key"],
+                    project_name=doc["project_name"],
+                    issue_type=doc["issue_type"]
+                )
+                tasks.append(task)
                 
-                # Add data points
-                data_points.append(ReportDataPoint(
-                    label=f"Project: {doc['project_name']} (Total)",
-                    value=doc["total_tasks"],
-                    metadata={"category": "project_total", "project_key": doc["_id"]}
-                ))
-                
-                data_points.append(ReportDataPoint(
-                    label=f"Project: {doc['project_name']} (Completed)",
-                    value=doc["completed_tasks"],
-                    metadata={"category": "project_completed", "project_key": doc["_id"]}
-                ))
-                
-                data_points.append(ReportDataPoint(
-                    label=f"Project: {doc['project_name']} (Completion %)",
-                    value=project_info["completion_rate"],
-                    metadata={"category": "project_completion", "project_key": doc["_id"]}
-                ))
+                # Add to estimated hours if available
+                if task.story_points:
+                    total_story_points += float(task.story_points)
+                    # Convert story points to hours (typically 1 story point = 1 hour)
+                    total_estimated_hours += float(task.story_points)
             
-            # Summary
-            total_projects = len(project_data)
-            avg_completion_rate = round(sum(p["completion_rate"] for p in project_data) / total_projects if total_projects > 0 else 0, 2)
-            
-            summary = {
-                "total_projects": total_projects,
-                "average_completion_rate": avg_completion_rate,
-                "projects": project_data
-            }
-            
-            return data_points, summary
-            
-        except Exception as e:
-            logger.error(f"Failed to generate project progress report for user {user_id}: {e}")
-            return [], {}
-
-    async def _generate_time_tracking_report(self, user_id: str, request: ReportGenerationRequest) -> tuple:
-        """Generate time tracking report"""
-        try:
-            # For now, we'll simulate time tracking data
-            # In a real implementation, this would connect to Jira's time tracking API
-            
-            # Simulated data
+            # Create data points
             data_points = [
                 ReportDataPoint(
                     label="Total Estimated Hours",
-                    value=120,
+                    value=round(total_estimated_hours, 2),
                     metadata={"category": "estimated"}
                 ),
                 ReportDataPoint(
-                    label="Total Logged Hours",
-                    value=95,
-                    metadata={"category": "logged"}
+                    label="Total Story Points",
+                    value=round(total_story_points, 2),
+                    metadata={"category": "story_points"}
                 ),
                 ReportDataPoint(
-                    label="Remaining Hours",
-                    value=25,
-                    metadata={"category": "remaining"}
+                    label="Total Tasks",
+                    value=len(tasks),
+                    metadata={"category": "total_tasks"}
                 ),
                 ReportDataPoint(
-                    label="Time Variance (%)",
-                    value=20.8,
-                    metadata={"category": "variance"}
+                    label="Completed Tasks",
+                    value=len([t for t in tasks if t.status in ["Done", "Closed", "Resolved"]]),
+                    metadata={"category": "completed_tasks"}
                 )
             ]
             
+            # Calculate summary
+            completed_tasks = len([t for t in tasks if t.status in ["Done", "Closed", "Resolved"]])
+            completion_rate = round((completed_tasks / len(tasks) * 100) if len(tasks) > 0 else 0, 2)
+            
             summary = {
-                "total_estimated": 120,
-                "total_logged": 95,
-                "remaining": 25,
-                "variance_percentage": 20.8
+                "total_estimated_hours": round(total_estimated_hours, 2),
+                "total_story_points": round(total_story_points, 2),
+                "total_tasks": len(tasks),
+                "completed_tasks": completed_tasks,
+                "completion_rate": completion_rate
             }
             
             return data_points, summary
@@ -527,6 +672,13 @@ class ReportsService:
             if request.project_key:
                 query["project_key"] = request.project_key
             
+            if request.user_id:
+                # Match on either assignee_account_id or assignee name/email
+                query["$or"] = [
+                    {"assignee_account_id": request.user_id},
+                    {"assignee": request.user_id}  # For backward compatibility
+                ]
+            
             # Get tasks and analyze resource distribution
             cursor = tasks_collection.find(query)
             tasks = []
@@ -542,6 +694,11 @@ class ReportsService:
                     status=doc["status"],
                     priority=doc["priority"],
                     assignee=doc["assignee"],
+                    assignee_account_id=doc.get("assignee_account_id"),
+                    assignee_email=doc.get("assignee_email"),
+                    story_points=doc.get("story_points"),
+                    start_date=doc.get("start_date"),
+                    sprint=doc.get("sprint"),
                     created=doc["created"],
                     updated=doc["updated"],
                     duedate=doc["duedate"],
@@ -588,6 +745,163 @@ class ReportsService:
         except Exception as e:
             logger.error(f"Failed to generate resource utilization report for user {user_id}: {e}")
             return [], {}
+
+    async def _generate_risk_analysis_report(self, user_id: str, request: ReportGenerationRequest) -> tuple:
+        """Generate risk analysis report using risk service"""
+        try:
+            from services.risk_service import run_risk_analysis
+            
+            db = get_database()
+            tasks_collection = db.jira_tasks
+            risks_collection = db.risk_alerts
+            
+            # First, run risk analysis to ensure we have up-to-date risks
+            await run_risk_analysis(user_id)
+            
+            # Build query for tasks
+            query = {"user_id": user_id}
+            
+            if request.project_key:
+                query["project_key"] = request.project_key
+            
+            if request.user_id:
+                # Match on either assignee_account_id or assignee name/email
+                query["$or"] = [
+                    {"assignee_account_id": request.user_id},
+                    {"assignee": request.user_id}  # For backward compatibility
+                ]
+            
+            # Get tasks
+            tasks = []
+            cursor = tasks_collection.find(query)
+            async for doc in cursor:
+                task = JiraTask(
+                    id=str(doc["_id"]),
+                    user_id=doc["user_id"],
+                    jira_id=doc["jira_id"],
+                    key=doc["key"],
+                    summary=doc["summary"],
+                    status=doc["status"],
+                    priority=doc["priority"],
+                    assignee=doc["assignee"],
+                    assignee_account_id=doc.get("assignee_account_id"),
+                    assignee_email=doc.get("assignee_email"),
+                    story_points=doc.get("story_points"),
+                    start_date=doc.get("start_date"),
+                    sprint=doc.get("sprint"),
+                    created=doc["created"],
+                    updated=doc["updated"],
+                    duedate=doc["duedate"],
+                    project_key=doc["project_key"],
+                    project_name=doc["project_name"],
+                    issue_type=doc["issue_type"]
+                )
+                tasks.append(task)
+            
+            # Get risk alerts for the user with correct field mapping
+            risk_query = {"user_id": user_id}
+            if request.project_key:
+                risk_query["project_key"] = request.project_key
+            if request.user_id and request.user_id.strip():  # Only add if user_id is provided and not empty
+                # Use assignee_account_id to match risk service storage
+                risk_query["assignee_account_id"] = request.user_id
+            
+            risks = []
+            risk_cursor = risks_collection.find(risk_query)
+            async for doc in risk_cursor:
+                risks.append(doc)
+            
+            # Create data points based on risk levels
+            data_points = []
+            risk_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            
+            for risk in risks:
+                risk_level = risk.get("risk_level", "UNKNOWN")
+                risk_counts[risk_level] = risk_counts.get(risk_level, 0) + 1
+            
+            # Add risk counts to data points
+            for level, count in risk_counts.items():
+                if count > 0:  # Only add non-zero counts
+                    data_points.append(ReportDataPoint(
+                        label=f"Risk Level: {level}",
+                        value=count,
+                        metadata={"category": "risk_levels"}
+                    ))
+            
+            # Add risk details breakdown
+            high_risk_tasks = [r for r in risks if r.get("risk_level") in ["CRITICAL", "HIGH"]]
+            for risk in high_risk_tasks[:10]:  # Limit to top 10 for readability
+                data_points.append(ReportDataPoint(
+                    label=f"High Risk: {risk.get('task_key', 'Unknown')} - {risk.get('assignee', 'Unassigned')}",
+                    value=risk.get("risk_score", 0),
+                    metadata={
+                        "category": "high_risk_details",
+                        "task_key": risk.get("task_key"),
+                        "assignee": risk.get("assignee"),
+                        "reasons": risk.get("reasons", [])
+                    }
+                ))
+            
+            # Also add task-based metrics
+            overdue_tasks = len([t for t in tasks if t.duedate and t.duedate < datetime.utcnow() and t.status not in ["Done", "Closed", "Resolved"]])
+            high_priority_tasks = len([t for t in tasks if t.priority in ["High", "Highest", "Critical"]])
+            in_progress_tasks = len([t for t in tasks if t.status in ["In Progress", "In Review"]])
+            unassigned_tasks = len([t for t in tasks if not t.assignee_account_id])
+            
+            data_points.extend([
+                ReportDataPoint(
+                    label="Overdue Tasks",
+                    value=overdue_tasks,
+                    metadata={"category": "task_metrics"}
+                ),
+                ReportDataPoint(
+                    label="High Priority Tasks",
+                    value=high_priority_tasks,
+                    metadata={"category": "task_metrics"}
+                ),
+                ReportDataPoint(
+                    label="In Progress Tasks",
+                    value=in_progress_tasks,
+                    metadata={"category": "task_metrics"}
+                ),
+                ReportDataPoint(
+                    label="Unassigned Tasks",
+                    value=unassigned_tasks,
+                    metadata={"category": "task_metrics"}
+                )
+            ])
+            
+            # Calculate summary with more detailed metrics
+            total_risks = sum(risk_counts.values())
+            critical_risks = risk_counts.get("CRITICAL", 0)
+            high_risks = risk_counts.get("HIGH", 0)
+            completion_rate = round((len([t for t in tasks if t.status in ["Done", "Closed", "Resolved"]]) / len(tasks) * 100) if len(tasks) > 0 else 0, 2)
+            
+            # Calculate risk exposure percentage
+            high_risk_percentage = round(((critical_risks + high_risks) / total_risks * 100) if total_risks > 0 else 0, 2)
+            
+            summary = {
+                "total_risks": total_risks,
+                "critical_risks": critical_risks,
+                "high_risks": high_risks,
+                "medium_risks": risk_counts.get("MEDIUM", 0),
+                "low_risks": risk_counts.get("LOW", 0),
+                "high_risk_percentage": high_risk_percentage,
+                "total_tasks": len(tasks),
+                "overdue_tasks": overdue_tasks,
+                "high_priority_tasks": high_priority_tasks,
+                "unassigned_tasks": unassigned_tasks,
+                "completion_rate": completion_rate,
+                "risk_analysis_timestamp": datetime.utcnow().isoformat()
+            }
+            
+            return data_points, summary
+            
+        except Exception as e:
+            logger.error(f"Failed to generate risk analysis report for user {user_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return [], {"error": str(e)}
 
     async def delete_report(self, user_id: str, report_id: str) -> bool:
         """Delete a report"""

@@ -58,20 +58,19 @@ async def get_reportable_projects(current_user = Depends(get_current_user)):
 
 @router.get("/users", response_model=dict)
 async def get_reportable_users(current_user = Depends(get_current_user)):
-    """Get list of users available for reporting"""
+    """Get list of users available for reporting from Jira tasks"""
     try:
-        # Get all users for the current account
-        filter_params = UserFilter()
-        result = await users_service.get_users(filter_params, 1, 1000)  # Get all users
+        # Get unique assignees from stored Jira tasks for this user
+        assignees = await jira_service.get_unique_assignees_from_tasks(current_user.id)
         
-        # Format users for dropdown
+        # Format assignees for dropdown
         user_list = [
             {
-                "id": user.id,
-                "name": f"{user.first_name} {user.last_name}",
-                "email": user.email
+                "id": assignee["account_id"],
+                "name": assignee["name"],
+                "email": assignee["email"]
             }
-            for user in result["users"]
+            for assignee in assignees
         ]
         
         return {"users": user_list}

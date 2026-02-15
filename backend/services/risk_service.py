@@ -201,6 +201,8 @@ async def run_risk_analysis(user_id: str = None):
             risk_doc = {
                 "task_key": task["key"],
                 "task_title": task.get("summary"),
+                "project_key": task.get("project_key"),  # Add project key
+                "project_name": task.get("project_name"),  # Add project name
 
                 # UI fields
                 "assignee": assignee_name,

@@ -103,6 +103,13 @@ const reportTypes = [
     description: "Team capacity and resource allocation",
     icon: TrendingUp,
     color: "bg-red-500"
+  },
+  { 
+    id: "risk_analysis", 
+    name: "Risk Analysis", 
+    description: "Risk exposure and mitigation analysis",
+    icon: BarChart3,
+    color: "bg-orange-500"
   }
 ];
 
@@ -372,29 +379,68 @@ export default function Reports() {
       categorizedData[category].push(point);
     });
 
-    // For simplicity, we'll render the first category as a bar chart
-    const firstCategory = Object.keys(categorizedData)[0];
-    const chartData = categorizedData[firstCategory] || [];
+    // Determine chart type based on report type
+    const getChartComponent = (category, data) => {
+      const chartProps = {
+        width: "100%",
+        height: 300,
+        data: data
+      };
 
-    if (chartData.length === 0) {
-      return (
-        <div className="flex items-center justify-center h-64 text-muted-foreground">
-          No chart data available
-        </div>
-      );
-    }
+      // Map categories to appropriate chart types
+      switch(category) {
+        case 'status':
+        case 'priority':
+        case 'assignee':
+        case 'user_tasks':
+        case 'project_total':
+        case 'project_completed':
+        case 'project_completion':
+        case 'workload':
+        case 'estimated':
+        case 'story_points':
+        case 'total_tasks':
+        case 'completed_tasks':
+          return (
+            <ResponsiveContainer {...chartProps}>
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
+                <YAxis />
+                <Tooltip wrapperStyle={{ zIndex: 1000 }} />
+                <Legend />
+                <Bar dataKey="value" fill="#3b82f6" />
+              </BarChart>
+            </ResponsiveContainer>
+          );
+        default:
+          return (
+            <ResponsiveContainer {...chartProps}>
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={80} />
+                <YAxis />
+                <Tooltip wrapperStyle={{ zIndex: 1000 }} />
+                <Legend />
+                <Bar dataKey="value" fill="#3b82f6" />
+              </BarChart>
+            </ResponsiveContainer>
+          );
+      }
+    };
+
+    // Render each category as a separate chart
+    const chartElements = Object.entries(categorizedData).map(([category, data]) => (
+      <div key={category} className="mb-6">
+        <h4 className="font-semibold mb-2 capitalize">{category.replace(/_/g, ' ')}</h4>
+        {getChartComponent(category, data)}
+      </div>
+    ));
 
     return (
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="value" fill="#3b82f6" />
-        </BarChart>
-      </ResponsiveContainer>
+      <div className="overflow-x-auto">
+        {chartElements}
+      </div>
     );
   };
 
@@ -403,26 +449,102 @@ export default function Reports() {
       return null;
     }
 
-    const summaryItems = Object.entries(report.summary).map(([key, value]) => {
-      // Format key to be more readable
-      const formattedKey = key
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
-      
-      return (
-        <div key={key} className="flex justify-between py-2 border-b">
-          <span className="text-muted-foreground">{formattedKey}</span>
-          <span className="font-medium">
-            {typeof value === 'number' ? value.toLocaleString() : value}
-          </span>
+    const summaryItems = Object.entries(report.summary)
+      .filter(([key, value]) => {
+        // Skip complex objects and arrays that need special handling
+        return !['projects', 'filters_applied'].includes(key) && 
+               !(Array.isArray(value) && typeof value[0] === 'object');
+      })
+      .map(([key, value]) => {
+        // Format key to be more readable
+        const formattedKey = key
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase());
+        
+        // Format value based on type
+        let formattedValue = value;
+        if (typeof value === 'number') {
+          if (key.includes('rate') || key.includes('percentage')) {
+            formattedValue = `${value}%`;
+          } else if (key.includes('hour')) {
+            formattedValue = `${value} hrs`;
+          } else {
+            formattedValue = value.toLocaleString();
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          // Handle simple objects by converting to JSON string
+          formattedValue = JSON.stringify(value);
+        }
+        
+        return (
+          <div key={key} className="flex justify-between py-2 border-b">
+            <span className="text-muted-foreground">{formattedKey}</span>
+            <span className="font-medium">
+              {formattedValue}
+            </span>
+          </div>
+        );
+      });
+
+    // Handle projects array separately
+    let projectsSection = null;
+    if (report.summary.projects && Array.isArray(report.summary.projects)) {
+      projectsSection = (
+        <div className="mt-4">
+          <h5 className="font-semibold text-md mb-2">Projects Breakdown</h5>
+          <div className="space-y-2">
+            {report.summary.projects.map((project, index) => (
+              <div key={index} className="bg-muted/50 p-3 rounded-lg">
+                <div className="font-medium">{project.project_name} ({project.project_key})</div>
+                <div className="grid grid-cols-2 gap-2 text-sm mt-1">
+                  <div>Total Tasks: {project.total_tasks}</div>
+                  <div>Completed: {project.completed_tasks}</div>
+                  <div>In Progress: {project.in_progress_tasks}</div>
+                  <div>To Do: {project.todo_tasks}</div>
+                  <div className="col-span-2">Completion Rate: {project.completion_rate}%</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       );
-    });
+    }
+
+    // Handle filters applied
+    let filtersSection = null;
+    if (report.summary.filters_applied && typeof report.summary.filters_applied === 'object') {
+      const filterItems = Object.entries(report.summary.filters_applied)
+        .filter(([key, value]) => value !== null && value !== undefined && value !== '')
+        .map(([key, value]) => {
+          const formattedKey = key
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          return (
+            <div key={key} className="text-sm">
+              <span className="text-muted-foreground">{formattedKey}:</span>
+              <span className="ml-1 font-medium">{String(value)}</span>
+            </div>
+          );
+        });
+      
+      if (filterItems.length > 0) {
+        filtersSection = (
+          <div className="mt-4">
+            <h5 className="font-semibold text-md mb-2">Filters Applied</h5>
+            <div className="bg-muted/30 p-3 rounded-lg space-y-1">
+              {filterItems}
+            </div>
+          </div>
+        );
+      }
+    }
 
     return (
       <div className="space-y-2">
         <h4 className="font-semibold text-lg">Summary</h4>
         {summaryItems}
+        {projectsSection}
+        {filtersSection}
       </div>
     );
   };
